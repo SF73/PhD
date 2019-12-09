@@ -65,6 +65,7 @@ class cartography():
         self.deadPixeltol = deadPixeltol
         self.aspect = aspect
         self.Linescan = Linescan
+        self.leftpressed = False
         
         if autoclose:
             plt.ioff()
@@ -247,21 +248,32 @@ class cartography():
             self.spec_ax.set_ylim((0,np.nanmax(self.hypSpectrum)))
             if Linescan:    
                 self.cursor = MultiCursor(self.fig.canvas, (self.ax, self.bx), color='r', lw=1,horizOn=True, vertOn=True)
-            else:
-                self.cursor = MultiCursor(self.fig.canvas, (self.ax, self.bx,self.cx), color='r', lw=1,horizOn=True, vertOn=True)
+            def onmotion(event):
+                if self.leftpressed:
+                    x = event.xdata
+                    y = event.ydata
+                    if ((event.inaxes is not None) and (x > self.X.min()) and (x <= self.X.max()) and 
+                        (y > self.Y.min()) and (y <= self.Y.max())):
+                        indx = np.argmin(abs(x-self.X))
+                        indy=np.argmin(abs(y-self.Y))
+                        self.spec_data.set_ydata(self.hypSpectrum.data[indy,indx])
+                        self.spec_fig.canvas.draw()
+            
             def onclick(event):
                 if event.button==1:
-                    if event.dblclick:
-                        self.cursor.active = not(self.cursor.active)
-                    elif self.cursor.active:
-                        x = event.xdata
-                        y = event.ydata
-                        if ((event.inaxes is not None) and (x > self.X.min()) and (x <= self.X.max()) and 
-                            (y > self.Y.min()) and (y <= self.Y.max())):
-                            indx = np.argmin(abs(x-self.X))
-                            indy=np.argmin(abs(y-self.Y))
-                            self.spec_data.set_ydata(self.hypSpectrum.data[indy,indx])
-                            self.spec_fig.canvas.draw_idle()
+                    self.leftpressed = True
+                    self.cursor.active = True
+#                    if event.dblclick:
+#                        self.cursor.active = not(self.cursor.active)
+#                    elif self.cursor.active:
+#                    x = event.xdata
+#                    y = event.ydata
+#                    if ((event.inaxes is not None) and (x > self.X.min()) and (x <= self.X.max()) and 
+#                        (y > self.Y.min()) and (y <= self.Y.max())):
+#                        indx = np.argmin(abs(x-self.X))
+#                        indy=np.argmin(abs(y-self.Y))
+#                        self.spec_data.set_ydata(self.hypSpectrum.data[indy,indx])
+#                        self.spec_fig.canvas.draw_idle()
                 elif event.button == 3:
                     self.wavelenght = ma.masked_array(self.wavelenght.data,mask=False)
                     hypmask = np.resize(self.wavelenght.mask,self.hypSpectrum.shape)
@@ -270,11 +282,24 @@ class cartography():
                     self.hypimage -= np.nanmin(self.hypimage)
                     self.lumimage.set_array(self.hypimage)
                     self.cx.set_ylim(eV_To_nm/self.wavelenght.max(), eV_To_nm/self.wavelenght.min())
-                    self.fig.canvas.draw_idle()
+                    self.fig.canvas.draw()
+            def onrelease(event):
+                if event.button==1:
+                    self.leftpressed = False
+                    self.cursor.active = False
             def onselect(ymin, ymax):
                 indmin = np.argmin(abs(eV_To_nm/self.wavelenght-ymin))
                 indmax = np.argmin(abs(eV_To_nm/self.wavelenght-ymax))
+    #        
+    ##            thisx = x[indmin:indmax]
                 if abs(indmax-indmin)<1:return
+    #            indmin, indmax = np.sort((indmax,indmin))
+    #            thiswave = wavelenght[indmin:indmax]
+    #            mask = np.zeros(hypSpectrum.shape)
+    #            mask[:,:,indmin:indmax] = 1
+    #            hypimage=np.sum(hypSpectrum*mask,axis=2)
+    #            hypimage -= hypimage.min()
+    #            lumimage.set_array(hypimage)
                 self.wavelenght = ma.masked_outside(self.wavelenght,eV_To_nm/ymin,eV_To_nm/ymax)
                 hypmask = np.resize(self.wavelenght.mask,self.hypSpectrum.shape)
                 self.hypSpectrum = ma.masked_array(self.hypSpectrum,mask=hypmask)
@@ -282,31 +307,40 @@ class cartography():
                 self.hypimage -= np.nanmin(self.hypimage)
                 self.lumimage.set_array(self.hypimage)
                 self.cx.set_ylim(eV_To_nm/self.wavelenght.max(), eV_To_nm/self.wavelenght.min())
-                self.fig.canvas.draw_idle()
+                self.fig.canvas.draw()
             self.span = None
             if Linescan:
                 self.span = SpanSelector(self.cx, onselect, 'vertical', useblit=True,
                                     rectprops=dict(alpha=0.5, facecolor='red'),button=1)
             self.fig.canvas.mpl_connect('button_press_event', onclick)
+            self.fig.canvas.mpl_connect('motion_notify_event',onmotion)
+            self.fig.canvas.mpl_connect('button_release_event',onrelease)
 #            return self.hypSpectrum, self.wavelenght, spec_fig, spec_ax, cursor, span
-            #plt.show(block=True)
+            plt.show(block=True)
 
 if __name__ == "__main__":
+    import sys
 #    parser = argparse.ArgumentParser()
-#    parser.add_argument("path", type=str,help="path of the carto file")
+#    parser.add_argument("path", type=list,help="path of the carto file")
 #    parser.add_argument("-dp", "--deadPixeltol", type=float, help="Number of sigma for dead pixel detection",default=2)
 #    parser.add_argument("-l", "--linescan", action="store_true",
 #                    help="Linescan or energycarto")
+#    parser.add_argument("-s", "--save", action="store_true",
+#                    help="save")
 #    args = parser.parse_args()
+#    print(args.path)
     #cartography(path=args.path,deadPixeltol=args.deadPixeltol,Linescan=args.linescan)
-    path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw550nm\Hyp.dat",
-r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw360nm\Hyp.dat",
-r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw450nm\Hyp.dat"]
-    
-    path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-05-15 - T2455 Al - 300K\HYP1-T2455-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t005ms-cw430nm\Hyp.dat"]
-    start = time.time() 
-    cartography(path=path,deadPixeltol=2,Linescan=True)
-    end = time.time()
-    print(end-start)
+#    path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw550nm\Hyp.dat",
+#r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw360nm\Hyp.dat",
+#r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw450nm\Hyp.dat"]
+#    if len(sys.argv)>1:
+    if len(sys.argv)>1:
+        paths = sys.argv[1:]
+        cartography(path=paths,deadPixeltol=2,Linescan=True)
+#    path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-05-15 - T2455 Al - 300K\HYP1-T2455-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t005ms-cw430nm\Hyp.dat"]
+#    start = time.time() 
+#    cartography(path=path,deadPixeltol=2,Linescan=True)
+#    end = time.time()
+#    print(end-start)
 
    

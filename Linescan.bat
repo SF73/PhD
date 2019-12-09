@@ -6,4 +6,4 @@ echo %script%
 call %base%\Scripts\activate.bat %base%
 echo %1%
 call ipython.exe -- %script% %1% -dp 3 -l -s
-pause
+rem pause
