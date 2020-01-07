@@ -5,5 +5,5 @@ set script="C:\Users\sylvain.finot\Cloud CNRS\Python\Interactive_Report_oo+merge
 echo %script%
 call %base%\Scripts\activate.bat %base%
 echo %*%
-call ipython.exe -- %script% %*% -dp 1000 -l -s
+call python.exe -- %script% %*% -dp 1000 -l -s
 REM pause
