@@ -13,11 +13,12 @@ import matplotlib.pylab as plt
 from mpl_toolkits.axes_grid1.parasite_axes import SubplotHost
 import os.path
 import sys
+from scipy.signal import savgol_filter
 plt.style.use('Rapport')
 #plt.rc('axes', labelsize=16)
 
 
-def plotSpectrum(paths,eV):
+def plotSpectrum(paths,eV,savgol):
     if type(paths)==str:
         paths = [paths]
     fig=plt.figure()
@@ -32,6 +33,8 @@ def plotSpectrum(paths,eV):
             isIneV=True
         print("eV :",eV)
         print("isIneV",isIneV)
+        if savgol:
+            data[:,1] = savgol_filter(data[:,1],101,2)
         if eV ^ isIneV:
             ax1.plot(eV_To_nm/data[:,0],data[:,1])
         else:
@@ -81,5 +84,7 @@ if __name__ == '__main__':
         paths = sys.argv[1:]
         eV = input("Main axis in eV? [y/n] : ")
         eV = "y" in eV
-        plotSpectrum(paths,eV)
+        savgol = input("filter? [y/n] : ")
+        savgol = "y" in savgol
+        plotSpectrum(paths,eV,savgol)
         #input("Press ENTER to exit")
