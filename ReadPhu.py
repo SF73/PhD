@@ -30,12 +30,30 @@ Created on Mon Jun  3 14:20:33 2019
 import time
 import struct
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 def normalize(x,min,max):
     return (x-min)/(max-min)
 
 def readphu(path):
+    """
+    
+
+    Parameters
+    ----------
+    path : String
+        Path of the .phu file
+
+    Returns
+    -------
+    t : Array of float
+        bins
+    counts : Array of float
+        bincounts
+    tagDataList : list of Tuples
+        Tag and their corresponding value
+
+    """
     # Tag Types
     tyEmpty8      = struct.unpack(">i", bytes.fromhex("FFFF0008"))[0]
     tyBool8       = struct.unpack(">i", bytes.fromhex("00000008"))[0]
@@ -56,11 +74,12 @@ def readphu(path):
     # Python strings don't have terminating NULL characters, so they're stripped
     magic = inputfile.read(8).decode("ascii").strip('\0')
     if magic != "PQHISTO":
+        inputfile.close()
         print("ERROR: Magic invalid, this is not a PHU file.")
         exit(0)
     
     version = inputfile.read(8).decode("ascii").strip('\0')
-    
+    print("Tag version: %s\n" % version)
     # Write the header data to outputfile and also save it in memory.
     # There's no do ... while in Python, so an if statement inside the while loop
     # breaks out of it
@@ -146,17 +165,17 @@ def readphu(path):
     inputfile.close()
     return t,counts,tagDataList
 
-t,c,tagDataList = readphu(r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-10-15 - T2455\TRCL2_300K_450nm_slit0-1_side0-1_HV5kV_spot2-5_f400kHz_pulse1-25us.phu")
-tagD=np.array(tagDataList)
-syncDivider = tagD[:,1][tagD[:,0]=="HistResDscr_HWSyncDivider(0)"][0]
-duration = tagD[:,1][tagD[:,0]=="HistResDscr_MDescStopAfter(0)"][0] #en ms
-syncRate = tagD[:,1][tagD[:,0]=="HistResDscr_SyncRate(0)"][0] #Hz
-InputRate = tagD[:,1][tagD[:,0]=='HistResDscr_InputRate(0)'][0] #Hz
-dataOffset = tagD[:,1][tagD[:,0]=='HistResDscr_DataOffset(0)'][0] #?
+# t,c,tagDataList = readphu(r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-10-15 - T2455\TRCL2_300K_450nm_slit0-1_side0-1_HV5kV_spot2-5_f400kHz_pulse1-25us.phu")
+# tagD=np.array(tagDataList)
+# syncDivider = tagD[:,1][tagD[:,0]=="HistResDscr_HWSyncDivider(0)"][0]
+# duration = tagD[:,1][tagD[:,0]=="HistResDscr_MDescStopAfter(0)"][0] #en ms
+# syncRate = tagD[:,1][tagD[:,0]=="HistResDscr_SyncRate(0)"][0] #Hz
+# InputRate = tagD[:,1][tagD[:,0]=='HistResDscr_InputRate(0)'][0] #Hz
+# dataOffset = tagD[:,1][tagD[:,0]=='HistResDscr_DataOffset(0)'][0] #?
 
-minHist = np.histogram((c[(c>0) & (c<max(c)/2)]),bins=int(max(c)/10))
-maxHist = np.histogram((c[(c>max(c)/2)]),bins=int(max(c)/10))
-maxc = maxHist[1][maxHist[0].argmax()]
-minc =  minHist[1][minHist[0].argmax()]
+# minHist = np.histogram((c[(c>0) & (c<max(c)/2)]),bins=int(max(c)/10))
+# maxHist = np.histogram((c[(c>max(c)/2)]),bins=int(max(c)/10))
+# maxc = maxHist[1][maxHist[0].argmax()]
+# minc =  minHist[1][minHist[0].argmax()]
 
-plt.plot(t,normalize(c,minc,maxc))
+# plt.plot(t,normalize(c,minc,maxc))
