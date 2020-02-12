@@ -11,6 +11,8 @@ from ReadPhu import readphu
 import sys
 import logging
 import itertools
+from scipy.optimize import curve_fit
+from scipy.signal import savgol_filter
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,format='%(asctime)s:%(module)s:%(levelname)s:%(message)s',datefmt='%H:%M:%S')
 plt.style.use("Rapport")
@@ -18,6 +20,22 @@ plt.style.use("Rapport")
 
 def normalisation(t,fclock,fcount,T,dt,delay=0):
     return fcount*fclock*T*dt * np.exp(-fclock*np.abs(t-delay))
+
+def model(t,t0,tau,g2):
+ return 1+g2*np.exp(-np.abs((t-t0))/tau)
+
+def fit(t,data):
+ tmax = t[np.argmax(data)]
+ mean = np.mean(data[(t>60) & (t<80)])
+ ndata = data/mean
+ fdata = savgol_filter(ndata,11,2)
+ tau = abs(tmax-t[np.argmin(np.abs(fdata-fdata.max()*np.exp(-1)))])
+ p0 = [tmax,tau,max(ndata)]
+ idx = np.where(t<80)
+ popt,pcov = curve_fit(model,t[idx],ndata[idx],p0)
+ return mean,popt
+
+
 
 if __name__ == '__main__':
     if len(sys.argv)>1:
@@ -36,7 +54,9 @@ if __name__ == '__main__':
             BS = CountRate/(CountRate+SyncRate)
             logger.info('\nSyncDivider : %s\nSyncRate : %s\nCountRate : %s\nBeamSplitter : %s\nBinningFactor : %s\nResolution : %.3E\nIntegrationTime : %s'%(SyncDivider,SyncRate,CountRate,BS,BinningFactor,Resolution,IntegrationTime))
             color=next(ax._get_lines.prop_cycler)['color']
-            ax.plot(t*1e9,counts,'.',c=color,alpha=0.1)
+            mean,popt = fit(t*1e9,counts)
+            ax.plot(t*1e9,counts/mean,'.',c=color,alpha=0.9)
+            ax.plot(t*1e9,model(t*1e9,*popt),c=color)
             #ax.plot(t*1e9,normalisation(t,SyncRate,CountRate,IntegrationTime*1e-3,Resolution),c=color)
         ax.set_xlabel("Delay (ns)")
         ax.set_ylabel("Counts")
