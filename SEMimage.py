@@ -22,13 +22,14 @@ def  scaleSEMimage(file):
         SEM Image without infobar
 
     """
+    # file = r"C:\Users\sylvain.finot\Cloud Neel\Data\2020\2020-02-06 - T2453 - 005K\Wire 2\Crack1 & 2\spectres\Hyp-cw370nm-T005K-Slit0-5mm-t1000ms-spot2-HV2kV_gr600_zoom150000_SEM image before carto.tif"
     with open(file,'r',encoding="Latin-1") as myfile:
         data =myfile.read()
     PixelWidth=eval(data[data.find('PixelWidth=')+11:data.find('PixelWidth=')+23]) #largeur d'un pixel
     PixelHeight=eval(data[data.find('PixelHeight=')+12:data.find('PixelHeight=')+24]) #hauteur d'un pixel
     width=eval(data[data.find('ResolutionX=')+12:data.find('ResolutionX=')+16]) #largeur en #pixel
     height=eval(data[data.find('ResolutionY=')+12:data.find('ResolutionY=')+16]) #hauteur en #pixel
-    Acceleration=float(eval(data[data.find('HV=')+3:data.find('HV=')+8]))
+    Acceleration=float(eval(data[data.find('[Beam]\nHV=')+10:data.find('[Beam]\nHV=')+15]))
     #FullImage =  image.crop((0,0,width,height))
     Totallength_x = PixelWidth *width #largeur de l'image en m
     Totallength_y = height*PixelHeight #hauteur en m

@@ -58,7 +58,8 @@ class MyMultiCursor(MultiCursor):
         self.hlines = [ax.axhline(ymid, visible=True, **lineprops) for ax in self.horizAxes]
         
 class cartography():
-    def __init__(self,path,deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False):
+    def __init__(self,path,deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False,lognorm = False):
+        #%%
         self.shift_is_held = False
         if type(path)==str:
             self.path = [path]
@@ -73,7 +74,6 @@ class cartography():
             plt.ioff()
         else:
             plt.ion()
-        #############################################################
         dirnameL = list()
         wavelenghtL = list()
         infoL = list()
@@ -82,14 +82,18 @@ class cartography():
         ylenL = list()
         xcoordL = list()
         ycoordL = list()
-        filepathL = list()
+        semImageL = list()
+        semCartoL = list()
+        #%%
         for i in range(len(self.path)):
             dirname,filename = os.path.split(self.path[i])
             filename, ext = os.path.splitext(filename)
             dirnameL.append(os.path.join(dirname,filename))
             hyppath = self.path[i]
             specpath = os.path.join(dirnameL[i]+'_X_axis.asc')
-            filepathL.append(os.path.join(dirnameL[i]+'_SEM image after carto.tif'))
+            semImageL.append(os.path.join(dirnameL[i]+'_SEM image before carto.tif'))
+            if os.path.exists(os.path.join(dirnameL[i]+'_SEM_carto.asc')):
+                semCartoL.append(os.path.join(dirnameL[i]+'_SEM_carto.asc'))
             #data = np.loadtxt(hyppath)
             data = pd.read_csv(hyppath,delimiter='\t',header=None,dtype=np.float).to_numpy() #faster
             xlenL.append(int(data[0,0])) #number of pixel in x dir
@@ -139,13 +143,13 @@ class cartography():
         ylen = np.array(ylenL)[0]
         xcoord = np.array(xcoordL)[0]
         ycoord = np.array(ycoordL)[0]
-        filepath = filepathL[0]
-        
+        filepath = semImageL[0]
+        semCarto = np.loadtxt(semCartoL[0])
+        #%%
         self.hypSpectrum = np.transpose(np.reshape(np.transpose(CLdata),(ylen,xlen ,len(self.wavelenght))), (0, 1, 2))
         #correct dead / wrong pixels
         #if len(self.path)==1:
         #    self.hypSpectrum, self.hotpixels = correct_dead_pixel(self.hypSpectrum,tol=self.deadPixeltol)
-        
         self.wavelenght = ma.masked_array(self.wavelenght,mask=False) #Nothing is masked
         #np.resize(self.wavelenght.mask,self.hypSpectrum.shape)
         #self.hypSpectrum = ma.masked_array(self.hypSpectrum,mask=hypmask)
@@ -162,25 +166,41 @@ class cartography():
         newY = np.linspace(yscale_CL[int(ycoord.min())],yscale_CL[int(ycoord.max())],len(yscale_CL))
         self.X = np.linspace(np.min(newX),np.max(newX),self.hypSpectrum.shape[1])
         self.Y = np.linspace(np.min(newY),np.max(newY),self.hypSpectrum.shape[0])
-    
-        nImage = np.array(image.crop((xcoord.min(),ycoord.min(),xcoord.max(),ycoord.max())))
-        self.ax.imshow(nImage,cmap='gray',vmin=0,vmax=65535,interpolation = "None",extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
         
+        #SEM image / carto
+        nImage = np.array(image.crop((xcoord.min(),ycoord.min(),xcoord.max(),ycoord.max())))
+        if len(semCarto)>0:
+            self.ax.imshow(semCarto,cmap='gray',interpolation = 'nearest',\
+                           extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
+        else:
+            self.ax.imshow(nImage,cmap='gray',vmin=0,vmax=65535,\
+                           interpolation = 'nearest',\
+                               extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
         self.hypimage=np.nansum(self.hypSpectrum,axis=2)
         jet = cm.jet
         jet.set_bad(color='k')
         self.hyperspectralmap = cm.ScalarMappable(cmap=jet)
         self.hyperspectralmap.set_clim(vmin=np.nanmin(self.hypimage),vmax=np.nanmax(self.hypimage))
-        self.lumimage = self.bx.imshow(self.hypimage,cmap=self.hyperspectralmap.cmap,norm=self.hyperspectralmap.norm,interpolation = "None",extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
+        
+        self.lumimage = self.bx.imshow(self.hypimage,cmap=self.hyperspectralmap.cmap,\
+                                           norm=self.hyperspectralmap.norm,\
+                                           interpolation = 'nearest',\
+                                           extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
         if self.Linescan:
             self.linescan = np.sum(self.hypSpectrum,axis=0)
-            self.linescanmap = cm.ScalarMappable(cmap=jet)
+            if lognorm:
+                norm = matplotlib.colors.LogNorm()#vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
+            else:
+                norm = matplotlib.colors.Normalize()#vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
+            self.linescanmap = cm.ScalarMappable(cmap=jet,norm=norm)
             self.linescanmap.set_clim(vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
             # ATTENTION pcolormesh =/= imshow
             #imshow takes values at pixel 
             #pcolormesh takes values between
             temp = np.linspace(newX.min(),newX.max(),self.X.size+1)
-            self.im=self.cx.pcolormesh(temp,eV_To_nm/self.wavelenght,self.linescan.T,cmap=self.linescanmap.cmap,rasterized=True)
+            self.im=self.cx.pcolormesh(temp,eV_To_nm/self.wavelenght,self.linescan.T,\
+                                       cmap=self.linescanmap.cmap,norm=self.linescanmap.norm,\
+                                           rasterized=True)
             def format_coord(x, y):
                 xarr = self.X
                 yarr = eV_To_nm/self.wavelenght
@@ -197,7 +217,9 @@ class cartography():
             self.cx.set_xlabel("distance (µm)")
             self.cx.set_aspect(self.aspect)
         else:
-            self.im = self.cx.imshow(self.wavelenght[np.nanargmax(self.hypSpectrum,axis=2)],cmap='viridis',extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])    
+            self.im = self.cx.imshow(self.wavelenght[np.nanargmax(self.hypSpectrum,axis=2)],\
+                                     cmap='viridis',\
+                                    extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])    
             self.cx.set_aspect(aspect)
         self.bx.set_aspect(self.aspect)
         self.ax.set_aspect(self.aspect)
@@ -208,7 +230,8 @@ class cartography():
         pos = self.cx.get_position().bounds
         cbar_ax = self.fig.add_axes([0.85, pos[1], 0.05, pos[-1]*0.9])  
         self.fig.colorbar(self.linescanmap, cax=cbar_ax)
-        cbar_ax.ticklabel_format(axis='both',style='sci',scilimits=(0,0))
+        if not lognorm:
+            cbar_ax.ticklabel_format(axis='both',style='sci',scilimits=(0,0))
     
         #Colorbar de l'image
         pos = self.bx.get_position().bounds
