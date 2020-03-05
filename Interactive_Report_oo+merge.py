@@ -23,6 +23,7 @@ import matplotlib.cm as cm
 import pandas as pd
 import time
 from Spectrum import Spectrum
+from PIL.PngImagePlugin import PngImageFile, PngInfo
 import scipy.constants as cst
 eV_To_nm = cst.c*cst.h/cst.e*1E9
 from detect_dead_pixels import correct_dead_pixel
@@ -34,6 +35,25 @@ plt.rc('axes', labelsize=16)
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,format='%(asctime)s:%(module)s:%(levelname)s:%(message)s',datefmt='%H:%M:%S')
+
+
+def add_meta_data(meta):
+    # use monkey-patching to replace the original plt.figure() function with
+    # our own, which supports clipboard-copying
+    mpl_savefig = plt.Figure.savefig
+    
+    def savemeta(*args, **kwargs):
+        mpl_savefig(*args,**kwargs)
+        path = args[1]
+        if path.endswith(".png"):
+            targetImage = PngImageFile(path)
+            metadata = PngInfo()
+            metadata.add_text("Description", str(meta))
+            targetImage.save(path, pnginfo=metadata)
+            
+    plt.Figure.savefig = savemeta
+
+
 
 def compareManyArrays(arrayList):
     return (np.diff(np.vstack(arrayList).reshape(len(arrayList),-1),axis=0)==0).all()                
@@ -59,7 +79,7 @@ class MyMultiCursor(MultiCursor):
         
 class cartography():
     def __init__(self,path,deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False,lognorm = False):
-        #%%
+        #%% Init
         self.shift_is_held = False
         if type(path)==str:
             self.path = [path]
@@ -84,7 +104,7 @@ class cartography():
         ycoordL = list()
         semImageL = list()
         semCartoL = list()
-        #%%
+        #%% Prepare data
         for i in range(len(self.path)):
             dirname,filename = os.path.split(self.path[i])
             filename, ext = os.path.splitext(filename)
@@ -108,7 +128,8 @@ class cartography():
             #'Grating','Entrance slit (mm)', 'Exposure time (s)','High voltage (V)','Spot size'
             logger.info('\n %s'%spectroInfos)
             infoL.append(spectroInfos[:,1])
-            
+        
+        add_meta_data({"Description":str(dict(spectroInfos))})
         wavelenghtL = np.array(wavelenghtL)
         inds = wavelenghtL.argsort(axis=0)[:,0]
         CLdataL = list(np.array(CLdataL)[inds])
@@ -145,7 +166,6 @@ class cartography():
         ycoord = np.array(ycoordL)[0]
         filepath = semImageL[0]
         semCarto = np.loadtxt(semCartoL[0])
-        #%%
         self.hypSpectrum = np.transpose(np.reshape(np.transpose(CLdata),(ylen,xlen ,len(self.wavelenght))), (0, 1, 2))
         #correct dead / wrong pixels
         #if len(self.path)==1:
@@ -156,12 +176,7 @@ class cartography():
         self.hypSpectrum = ma.masked_invalid(self.hypSpectrum)
     
         xscale_CL,yscale_CL,acceleration,image = scaleSEMimage(filepath)
-        if self.Linescan:
-            self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,gridspec_kw={'height_ratios': [1,1,3]})
-        else:
-            self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,sharey=True)
-        self.fig.patch.set_alpha(0) #Transparency style
-        self.fig.subplots_adjust(top=0.9,bottom=0.12,left=0.15,right=0.82,hspace=0.1,wspace=0.05)
+        
         newX = np.linspace(xscale_CL[int(xcoord.min())],xscale_CL[int(xcoord.max())],len(xscale_CL))
         newY = np.linspace(yscale_CL[int(ycoord.min())],yscale_CL[int(ycoord.max())],len(yscale_CL))
         self.X = np.linspace(np.min(newX),np.max(newX),self.hypSpectrum.shape[1])
@@ -169,6 +184,14 @@ class cartography():
         
         #SEM image / carto
         nImage = np.array(image.crop((xcoord.min(),ycoord.min(),xcoord.max(),ycoord.max())))
+        #%% Plot
+        if self.Linescan:
+            self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,gridspec_kw={'height_ratios': [1,1,3]})
+        else:
+            self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,sharey=True)
+        self.fig.patch.set_alpha(0) #Transparency style
+        self.fig.subplots_adjust(top=0.9,bottom=0.12,left=0.15,right=0.82,hspace=0.1,wspace=0.05)
+
         if len(semCarto)>0:
             self.ax.imshow(semCarto,cmap='gray',interpolation = 'nearest',\
                            extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
@@ -238,6 +261,8 @@ class cartography():
         cbar_ax = self.fig.add_axes([0.85, pos[1], 0.05, pos[-1]*0.9])
         self.fig.colorbar(self.hyperspectralmap,cax=cbar_ax)
         cbar_ax.ticklabel_format(axis='both',style='sci',scilimits=(0,0))
+        # self.fig.savefig(r"C:\users\sylvain.finot\desktop\test.png")
+        #%%
         if save==True:
             self.fig.savefig(os.path.join(dirname,filename+".png"),dpi=300)
         if autoclose==True:
@@ -246,6 +271,11 @@ class cartography():
         self.Spectrum = Spectrum(self.wavelenght,np.nanmax(self.hypSpectrum))
         #if Linescan:    
             #self.cursor = MultiCursor(self.fig.canvas, (self.ax, self.bx), color='r', lw=1,horizOn=True, vertOn=True)
+        
+        def on_xlims_change(axes):
+            print("updated xlims: ", axes)
+        
+        
         def onmotion(event):
             if self.leftpressed:
                 x = event.xdata
@@ -336,7 +366,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args.paths)
     matplotlib.rcParams["savefig.directory"] = ""
-    cartography(path=args.paths,deadPixeltol=args.deadPixeltol,Linescan=args.linescan)
+    log = bool(input("Logscale [y/n]?").lower()=='y')
+    cartography(path=args.paths,deadPixeltol=args.deadPixeltol,Linescan=args.linescan,lognorm=log)
 #     path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw550nm\Hyp.dat",
 # r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw360nm\Hyp.dat",r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw450nm\Hyp.dat"]
 # #    if len(sys.argv)>1:
