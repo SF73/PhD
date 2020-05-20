@@ -22,9 +22,10 @@ class Spectrum():
         self.ax.ticklabel_format(axis='y',style='sci',scilimits=(0,0))
         self.minbar = self.ax.axvline(eV_To_nm/self.wavelenghts.max())
         self.maxbar = self.ax.axvline(eV_To_nm/self.wavelenghts.min())    
-        def format_coord(x, y):
-                return f'x={x:1.4f}, y={y:1.0f}, lambda={eV_To_nm/x:1.2f}'
-        self.ax.format_coord = format_coord
+        self.ax.format_coord = self.format_coord
+        
+    def format_coord(self,x, y):
+            return f'x={x:1.4f}, y={y:1.0f}, lambda={eV_To_nm/x:1.2f}'
     def set_y(self,y):
         self.graph.set_ydata(y)
     def set_limitbar(self,minw,maxw):
@@ -32,3 +33,5 @@ class Spectrum():
         self.maxbar.set_xdata(np.repeat(eV_To_nm/minw,2))
     def update(self):
         self.fig.canvas.draw_idle()
+    def plot_meanSpectrum(self,wavelenght,intensity):
+        self.ax.plot(eV_To_nm/wavelenght,intensity,c="k",alpha=.5)

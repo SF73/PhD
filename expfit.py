@@ -13,41 +13,48 @@ from mergeNoise import mergeData
 from stats import R2,R2adj,rChi2
 from models import *
 from FileHelper import getListOfFiles
+from ReadPhu import readphu
 #from batchProcessing import getListOfFiles
 #plt.rc('font', family='serif',size=12)
 #plt.rc('text', usetex=False)
 #plt.rc('xtick', labelsize=14)
 #plt.rc('ytick', labelsize=14)
 #plt.rc('axes', labelsize=18)
-plt.style.use('Rapport')
 
-def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
+def process_fromFile(path,save=False,name="",autoclose=False,merge=False,ax=None,verbose=False):
 #    path = r"F:\data\2019-03-08 - T2455 - withUL\TRCL-440nm.dat"
-    name = path[path.find('2019'):]
-    print('path:')
-    print(path)
-    if autoclose:
-        plt.ioff()
-    else:
-        plt.ion()
-    
-    if len(name)>100:name=''
-    if fig is None:
+    if verbose:  
+        print('path:')
+        print(path)
+    # if autoclose:
+    #     plt.ioff()
+    # else:
+    #     plt.ion()
+    results = {}
+    name = name[:100]
+    if ax is None:
+        plt.style.use('Rapport')
         fig, ax = plt.subplots()
         fig.patch.set_alpha(0)
         ax.ticklabel_format(axis='y',style='sci',scilimits=(0,0))
         ax.set_xlabel("t (ns)")
         ax.set_ylabel("Intensity (arb. unit)")
         ax.set_title("Carrier lifetime : %s"%name)
-    else:
-        ax = fig.gca()
     
-    counts = np.loadtxt(path) #Full histogram
-    binNumber = int(counts[0]) #Nombre de bin
-    binsize = counts[3] #Taille d'un bin
-    counts = counts[-binNumber:] #histogram
-#    counts = counts/max(counts)
-    t = np.arange(binNumber)*binsize #echelle de temps en ns
+    if path.endswith(".phu"):
+        t,counts,tags = readphu(path)
+        t = t*1e9
+        tags = dict(tags)
+        results.update({"Count_Rate":tags['HistResDscr_InputRate(0)']})
+        binNumber = len(counts)
+        binsize = t[1]-t[0]
+    else:
+        counts = np.loadtxt(path) #Full histogram
+        binNumber = int(counts[0]) #Nombre de bin
+        binsize = counts[3] #Taille d'un bin
+        counts = counts[-binNumber:] #histogram
+    #    counts = counts/max(counts)
+        t = np.arange(binNumber)*binsize #echelle de temps en ns
 
     #distance la plus courte si on travaille a 100MHz -> 200MHz (montee + descente) -> periode de 5ns
     #detection si peak est grand de 0.1 max
@@ -55,9 +62,10 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     p1 = np.convolve(peaks,[1,-1],mode='same')[1::2].mean()*binsize
     p2 = np.convolve(peaks,[1,-1],mode='same')[2::2].mean()*binsize
     meanfreq = 1e-6/((p1+p2)*1e-9)
-    print("Mean freq : %2.2f"%meanfreq)
-    print("Short period : %2.2f ns"%max(p1,p2))
-    print("Long period : %2.2f ns"%min(p1,p2))
+    if verbose:
+        print("Mean freq : %2.2f"%meanfreq)
+        print("Short period : %2.2f ns"%max(p1,p2))
+        print("Long period : %2.2f ns"%min(p1,p2))
 #    test,testa = plt.subplots()
 #    testa.plot(t,counts)
 #    asymetrie = max(p1,p2)/(p1+p2) - 0.5
@@ -78,7 +86,8 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     rightBaseline = np.median(reduced_counts[-int(1/binsize):])
     leftBaseline  = np.median(reduced_counts[:int(1/binsize)])
     baselineError = abs(rightBaseline-leftBaseline)/min(rightBaseline,leftBaseline) > 0.20
-    print("Asymetric baseline : %s" %(str(baselineError)))
+    if verbose:
+        print("Asymetric baseline : %s" %(str(baselineError)))
     baseline = rightBaseline
 #    if baselineError:
 #        reduced_time = t[tmin:tmax]
@@ -96,7 +105,7 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     while(np.isnan(rightl) or rightl<leftl):        
         threshold = (max(reduced_counts)-baseline)*c+baseline #(max(reduced_counts)-baseline)*np.exp(-3)
         mask = np.convolve(np.sign(reduced_counts-threshold),[-1,1],'same') #detect le chgt de sign de reduced-threshold
-        print(mask)
+        #print(mask)
         mask[0] = 0
         rightl = np.argmax(mask)
         c += 0.005
@@ -105,10 +114,12 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     t10 = reduced_time[rightl] - t0
     ax.plot(reduced_time,reduced_counts,'.',c='k',label=r'data | $\tau_{%.2d}$ = %.2e'%(np.round((c-0.005)*100),t10))
     SNR = max(reduced_counts)/baseline
-    print("tau %.4f : %.4f"%(t10,c))
-    print("SNR : %.4f"%SNR)
-    #Fit exponential decay
-    print("------------------simple decay------------------")
+    
+    if verbose:
+        print("tau %.4f : %.4f"%(t10,c))
+        print("SNR : %.4f"%SNR)
+        #Fit exponential decay
+        print("------------------simple decay------------------")
     #seuleement decay (pas de montée)
     fit_time = reduced_time[leftl:rightl]
     fit_count = reduced_counts[leftl:rightl]
@@ -121,9 +132,10 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     Radj = R2adj(len(fit_count),2,fit_count,decay_func(fit_time,t0,A_lin,K_lin)+baseline)
     rChi = rChi2(len(fit_count),2,fit_count,decay_func(fit_time,t0,A_lin,K_lin)+baseline)
 #    ax.plot(fit_time,decay_func(fit_time,t0,A_lin,K_lin)+baseline,label=r'decay fit $R^2 =$%.4f%s$\tau_{eff} =$ %.2e ns'%(R,'\n',-1/K_lin))
-    print("R2 : %.4f"%R)
-    print("R2adj : %.4f"%Radj)
-    print("rChi2 : %.4f"%rChi)
+    if verbose:
+        print("R2 : %.4f"%R)
+        print("R2adj : %.4f"%Radj)
+        print("rChi2 : %.4f"%rChi)
     
     fit_time = reduced_time[leftl:-300]
     fit_count = reduced_counts[leftl:-300]
@@ -133,7 +145,7 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     leftl = np.nan
     while(np.isnan(leftl)):        
         threshold = (max(reduced_counts)-leftBaseline)*c+leftBaseline #(max(reduced_counts)-baseline)*np.exp(-3)
-        print(threshold)
+        #print(threshold)
         mask = np.convolve(np.sign(reduced_counts-threshold),[1,-1],'same') #detect le chgt de sign de reduced-threshold
         mask[0] = 0
         leftl = np.argmax(mask)
@@ -143,27 +155,29 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
     fit_time = reduced_time[leftl:]
     fit_count = reduced_counts[leftl:]
     try:
-        print("------------------model1-----------------------")
         #fit simple exp convoluée avec heaviside
         init = [A_lin,K_lin,0.02,t0]
         popt,pcov= model_fit(fit_time,fit_count-baseline,init)
-        print(popt)
-        print(pcov)
+        if verbose:   
+            print("------------------model1-----------------------")
+            print(popt)
+            print(pcov)
         A,K,sig,t0=popt
         tauerror = np.sqrt(pcov[1,1])
         Rmono = R2(fit_count,model_func(fit_time,*popt)+baseline)
         Radj = R2adj(len(fit_count),3,fit_count,model_func(fit_time,*popt)+baseline)
         rChi = rChi2(len(fit_count),3,fit_count,model_func(fit_time,*popt)+baseline)
     #    ax.plot(fit_time,decay_func(fit_time,t0,A_lin,K_lin)+baseline,label=r'decay fit $R^2 =$%.4f%s$\tau_{eff} =$ %.2e ns'%(R,'\n',-1/K_lin))
-        print("R2 : %.4f"%Rmono)
-        print("R2adj : %.4f"%Radj)
-        print("rChi2 : %.4f"%rChi)
-        print("tau : %.4f +- %.4f"%(-1/K,tauerror))
+        if verbose:
+            print("R2 : %.4f"%Rmono)
+            print("R2adj : %.4f"%Radj)
+            print("rChi2 : %.4f"%rChi)
+            print("tau : %.4f +- %.4f"%(-1/K,tauerror))
         ax.plot(fit_time,model_func(fit_time,*popt)+baseline,c='orange',label=r'simple_fit $1-R^2 =$ %.2e %s $\tau_{eff} =$ %.2e ns %s  $\sigma=$%.2e ns'%((1-Rmono),'\n',-1/K,'\n',sig))
     
         
         
-        print("------------------model2-----------------------")
+        
         init = [A/2,K,A/2,K,sig,t0]
         #popt,pcov = model2_fit_bootstrap(fit_time,fit_count-baseline,init)
         popt,pcov= model2_fit(fit_time,fit_count-baseline,init)
@@ -180,13 +194,15 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
         Rbi = R2(fit_count,model2_func(fit_time,*popt)+baseline)
         Radj = R2adj(len(fit_count),3,fit_count,model2_func(fit_time,*popt)+baseline)
         rChi = rChi2(len(fit_count),3,fit_count,model2_func(fit_time,*popt)+baseline)
-        print("R2 : %.4f"%R)
-        print("R2adj : %.4f"%Radj)
-        print("rChi2 : %.4f"%rChi)
-        print("A1/A2 : %.4e"%(A1/A2))
+        if verbose:
+            print("------------------model2-----------------------")
+            print("R2 : %.4f"%R)
+            print("R2adj : %.4f"%Radj)
+            print("rChi2 : %.4f"%rChi)
+            print("A1/A2 : %.4e"%(A1/A2))
         taueff = (A1*(-1/K1)+A2*(-1/K2))/(A1+A2)
         
-        print("taueff : %.4e ns +- %.4e ns"%(taueff,tauefferror))
+        if verbose:print("taueff : %.4e ns +- %.4e ns"%(taueff,tauefferror))
         if Rbi>0.8:
             ax.plot(fit_time,model2_func(fit_time,*popt)+baseline,c='red',label=r'double_fit $1-R^2 =$ %.2e %s$A_{1} =$ %.2e %s$A_{2} =$ %.2e %s$\tau_{1} =$ %.2e ns %s$\tau_{2} =$ %.2e ns %s$\sigma =$ %.2e ns %s$\tau_{eff} =$ %.2e ns'%((1-Rbi),'\n',A1,'\n',A2,'\n',-1/K1,'\n',-1/K2,'\n',sig,'\n',taueff))
         
@@ -201,7 +217,10 @@ def process_fromFile(path,save=False,autoclose=False,merge=False,fig=None):
         if autoclose==True:
             plt.close(fig)
         ax.set_yscale('log')
-        return A,-1/K,t10,A1,A2,1/K1,1/K2,Rmono,tauerror,Rbi,tauefferror
+        results.update({"A":A,"tau":-1/K,"t10":t10,"A1":A1,"A2":A2,"tau1":-1/K1,\
+                        "tau2":-1/K2,"Rsingle":Rmono,"errtau":tauerror,\
+                            "Rdouble":Rbi,"errtaueff":tauefferror,"taueff":taueff})
+        return results
     except Exception as e:
         print(e)
         return None

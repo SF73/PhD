@@ -26,7 +26,7 @@ from Spectrum import Spectrum
 from PIL.PngImagePlugin import PngImageFile, PngInfo
 import scipy.constants as cst
 eV_To_nm = cst.c*cst.h/cst.e*1E9
-from detect_dead_pixels import correct_dead_pixel
+from hyperProcessing import correct_dead_pixel
 from SEMimage import scaleSEMimage
 from FileHelper import getListOfFiles,getSpectro_info
 from matplotlib.widgets import MultiCursor, Cursor, SpanSelector
@@ -43,14 +43,19 @@ def add_meta_data(meta):
     mpl_savefig = plt.Figure.savefig
     
     def savemeta(*args, **kwargs):
-        mpl_savefig(*args,**kwargs)
         path = args[1]
-        if path.endswith(".png"):
-            targetImage = PngImageFile(path)
-            metadata = PngInfo()
-            metadata.add_text("Description", str(meta))
-            targetImage.save(path, pnginfo=metadata)
-            
+        if path.endswith(".fig"):
+            import pickle as pkl
+            pkl.dump(args[0],  open(path,  'wb'))
+        else:
+            mpl_savefig(*args,**kwargs)
+            #fig = args[0]
+            if path.endswith(".png"):
+                targetImage = PngImageFile(path)
+                metadata = PngInfo()
+                metadata.add_text("Description", str(meta))
+                targetImage.save(path, pnginfo=metadata)
+        
     plt.Figure.savefig = savemeta
 
 
@@ -78,7 +83,7 @@ class MyMultiCursor(MultiCursor):
         self.hlines = [ax.axhline(ymid, visible=True, **lineprops) for ax in self.horizAxes]
         
 class cartography():
-    def __init__(self,path,deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False,lognorm = False):
+    def __init__(self,path,deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False,lognorm = False,trueSEM=True):
         #%% Init
         self.shift_is_held = False
         if type(path)==str:
@@ -111,7 +116,7 @@ class cartography():
             dirnameL.append(os.path.join(dirname,filename))
             hyppath = self.path[i]
             specpath = os.path.join(dirnameL[i]+'_X_axis.asc')
-            semImageL.append(os.path.join(dirnameL[i]+'_SEM image before carto.tif'))
+            semImageL.append(os.path.join(dirnameL[i]+'_SEM image after carto.tif'))
             if os.path.exists(os.path.join(dirnameL[i]+'_SEM_carto.asc')):
                 semCartoL.append(os.path.join(dirnameL[i]+'_SEM_carto.asc'))
             #data = np.loadtxt(hyppath)
@@ -192,7 +197,8 @@ class cartography():
         self.fig.patch.set_alpha(0) #Transparency style
         self.fig.subplots_adjust(top=0.9,bottom=0.12,left=0.15,right=0.82,hspace=0.1,wspace=0.05)
 
-        if len(semCarto)>0:
+        if (len(semCarto)>0) & (trueSEM):
+            logger.info("True SEM = %s"%str(trueSEM))
             self.ax.imshow(semCarto,cmap='gray',interpolation = 'nearest',\
                            extent=[np.min(newX),np.max(newX),np.max(newY),np.min(newY)])
         else:
@@ -261,7 +267,6 @@ class cartography():
         cbar_ax = self.fig.add_axes([0.85, pos[1], 0.05, pos[-1]*0.9])
         self.fig.colorbar(self.hyperspectralmap,cax=cbar_ax)
         cbar_ax.ticklabel_format(axis='both',style='sci',scilimits=(0,0))
-        # self.fig.savefig(r"C:\users\sylvain.finot\desktop\test.png")
         #%%
         if save==True:
             self.fig.savefig(os.path.join(dirname,filename+".png"),dpi=300)
@@ -269,6 +274,7 @@ class cartography():
             plt.close(self.fig)
             return None
         self.Spectrum = Spectrum(self.wavelenght,np.nanmax(self.hypSpectrum))
+        self.Spectrum.plot_meanSpectrum(self.wavelenght, np.mean(self.hypSpectrum,axis=(0,1)))
         #if Linescan:    
             #self.cursor = MultiCursor(self.fig.canvas, (self.ax, self.bx), color='r', lw=1,horizOn=True, vertOn=True)
         
@@ -291,23 +297,6 @@ class cartography():
             if event.button==1:
                 self.leftpressed = True
                 onmotion(event)
-                #self.cursor.active = True
-                #if event.dblclick:
-#                        if not(self.cursor.visible):
-#                            self.fig.canvas.blit(self.fig.bbox)
-                    #self.cursor.active = not(self.cursor.active)
-#                        self.cursor.visible = not(self.cursor.visible)
-#                        self.fig.canvas.draw_idle()
-#                        self.fig.canvas.blit(self.fig.bbox)
-#                    elif self.cursor.active:
-#                    x = event.xdata
-#                    y = event.ydata
-#                    if ((event.inaxes is not None) and (x > self.X.min()) and (x <= self.X.max()) and 
-#                        (y > self.Y.min()) and (y <= self.Y.max())):
-#                        indx = np.argmin(abs(x-self.X))
-#                        indy=np.argmin(abs(y-self.Y))
-#                        self.spec_data.set_ydata(self.hypSpectrum.data[indy,indx])
-#                        self.spec_fig.canvas.draw_idle()
             elif event.button == 3:
                 self.update()
         def onrelease(event):
@@ -367,7 +356,8 @@ if __name__ == "__main__":
     print(args.paths)
     matplotlib.rcParams["savefig.directory"] = ""
     log = bool(input("Logscale [y/n]?").lower()=='y')
-    cartography(path=args.paths,deadPixeltol=args.deadPixeltol,Linescan=args.linescan,lognorm=log)
+    trueSEM = bool(input("True SEM [y/n]?").lower()=='y')
+    cartography(path=args.paths,deadPixeltol=args.deadPixeltol,Linescan=args.linescan,lognorm=log,trueSEM=trueSEM)
 #     path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw550nm\Hyp.dat",
 # r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw360nm\Hyp.dat",r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw450nm\Hyp.dat"]
 # #    if len(sys.argv)>1:

@@ -20,9 +20,9 @@ Created on Mon Jun  3 14:20:33 2019
 # e.g. if your files are not too big. 
 # Otherwise it is best process the data on the fly and keep only the results.
 
-import time
+# import time
 import sys
-import struct
+# import struct
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
@@ -34,9 +34,13 @@ if __name__ == '__main__':
     if len(sys.argv)>1:
         fig, ax =plt.subplots()
         paths = sys.argv[1:]
+        normalise = input("Normalise [y/n] : ")
+        normalise = "y" in normalise
         for p in paths:
             #inputfile = sys.argv[1]
             t,counts,tags = readphu(p)
+            if normalise:
+                counts = (counts-min(counts))/(max(counts)-min(counts))
             tags = dict(tags)
             SyncDivider = tags['HistResDscr_HWSyncDivider(0)']
             SyncRate = tags['HistResDscr_SyncRate(0)']

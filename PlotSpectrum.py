@@ -33,12 +33,14 @@ def plotSpectrum(paths,eV,savgol):
             isIneV=True
         print("eV :",eV)
         print("isIneV",isIneV)
-        if savgol:
-            data[:,1] = savgol_filter(data[:,1],101,2)
+        
         if eV ^ isIneV:
-            ax1.plot(eV_To_nm/data[:,0],data[:,1])
+            x = eV_To_nm/data[:,0]
         else:
-            ax1.plot(data[:,0],data[:,1])
+            x = data[:,0]
+        ax1.plot(x,data[:,1])
+        if savgol:
+            ax1.plot(x,savgol_filter(data[:,1],101,2))
     
     ax1.set_ylabel('Intensity (arb. units)')
     ax2=ax1.twin()
