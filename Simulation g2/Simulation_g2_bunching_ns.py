@@ -68,14 +68,14 @@ class SimulationParameter:
     def getbins(self):
         return np.arange(0,self.binNumber*self.dt*1e-3,self.dt*1e-3)
     def get_eRate(self):
-        return (self.I/1.602e-19)*1e-21
+        return (self.I/1.602176634e-19)*1e-21
     def tostring(self):
         header = ""
         for i, j in self.__dict__.items():
             header += "{}\t{}\n".format(i,j)
         return header
 def simulate(param,fast=False):
-    electronRate = (param.I/1.602e-19)*1e-21 # pA to e/ns
+    electronRate = (param.I/1.602176634e-19)*1e-21 # pA to e/ns
     # =============================================================================
     # print("======================")
     # print("Simulation g2 monoexponentiel\n")

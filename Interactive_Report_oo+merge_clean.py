@@ -56,52 +56,72 @@ class MyMultiCursor(MultiCursor):
         self.vlines = [ax.axvline(xmid, visible=True, **lineprops) for ax in self.vertAxes]
         self.hlines = [ax.axhline(ymid, visible=True, **lineprops) for ax in self.horizAxes]
         
-class cartography():
-    def __init__(self,path,deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False,lognorm = False,trueSEM=True,Emin=None,Emax=None,normalize=False):
+class cartography(object):
+    
+    
+    Emin = None
+    Emax = None
+    deadPixeltol = 2
+    aspect = "auto"
+    Type = "linescan"
+    autoclose = False
+    save = False
+    lognorm = False
+    trueSEM = False
+    normalize = False
+    autoplot = True
+    fig_kw = {"figsize":[6.4,4.8]}
+    gridspec_kw={'height_ratios': [1,1,2],"top":0.9,"bottom":0.12,"left":0.15,"right":0.82,"hspace":0.1,"wspace":0.05}
+    subplot_kw=None
+    def __init__(self,path,**kwargs):#deadPixeltol = 2,aspect="auto",Linescan = True,autoclose=False,save=False,lognorm = False,trueSEM=True,Emin=None,Emax=None,normalize=False):
         #%% Init
         self.shift_is_held = False
+        self.leftpressed = False
         if type(path)==str:
             self.path = [path]
         else:
             self.path=path
-        self.deadPixeltol = deadPixeltol
-        self.aspect = aspect
-        self.Linescan = Linescan
-        self.leftpressed = False
-        self.normalize = normalize
-        
-        if autoclose:
-            plt.ioff()
-        else:
-            plt.ion()
+        for key in kwargs:
+            value_or_default = kwargs.get(key)
+            setattr(self, key, value_or_default)
+        # self.deadPixeltol = deadPixeltol
+        # self.aspect = aspect
+        # self.Linescan = Linescan
+        # self.normalize = normalize
+        if self.autoplot:
+            self.load()
+            self.plotLinescan(self.subplot_kw,self.gridspec_kw,**self.fig_kw)
             
-        r = loadData(self.path,deadPixeltol)
+    def load(self):            
+        r = loadData(self.path,self.deadPixeltol)
         self.X = r['X']
         self.Y = r['Y']
         self.wavelenght = r['wavelenght']
         self.hypSpectrum = r['hyper']
         self.semImage = r["semImage"]
-        if (Emin is not None) or (Emax is not None):
-            self.Emin = np.max(eV_To_nm/self.wavelenght.min(),Emin)
-            self.Emax = np.min(eV_To_nm/self.wavelenght.max(),Emax)
-            self.update(self.Emin,self.Emax)
+        if (self.Emin is not None) or (self.Emax is not None):
+            self.Emin = np.max(eV_To_nm/self.wavelenght.min(),self.Emin)
+            self.Emax = np.min(eV_To_nm/self.wavelenght.max(),self.Emax)
+            #self.update(self.Emin,self.Emax)
         # self.hypSpectrum = np.roll(self.hypSpectrum,,axis=1)
-        self.semImage = np.roll(self.semImage,-12,axis=1)
+        #self.semImage = np.roll(self.semImage,-12,axis=1)
         
-        if trueSEM and r['semCarto'] is not None:
+        if self.trueSEM and r['semCarto'] is not None:
             self.semCarto = r['semCarto']
         else:
-            trueSEM = False
-        #%% Plot
-        if self.Linescan:
-            self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,gridspec_kw={'height_ratios': [1,1,2]},figsize=(6.4,4.8*4/5))
+            self.trueSEM = False
+    def plotLinescan(self,subplot_kw=None, gridspec_kw=None, **fig_kw):
+        if self.autoclose:
+            plt.ioff()
         else:
-            self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,sharey=True)
+            plt.ion()
+        #%% Plot
+        self.fig,(self.ax,self.bx,self.cx)=plt.subplots(3,1,sharex=True,subplot_kw=subplot_kw,gridspec_kw=gridspec_kw,**fig_kw)
         self.fig.patch.set_alpha(0) #Transparency style
         self.fig.subplots_adjust(top=0.9,bottom=0.12,left=0.15,right=0.82,hspace=0.1,wspace=0.05)
 
-        if (trueSEM):
-            logger.info("True SEM = %s"%str(trueSEM))
+        if (self.trueSEM):
+            logger.info("True SEM = %s"%str(self.trueSEM))
             self.ax.imshow(self.semCarto,cmap='gray',interpolation = 'nearest',\
                            extent=[np.min(self.X),np.max(self.X),np.max(self.Y),np.min(self.Y)])
         else:
@@ -118,43 +138,39 @@ class cartography():
                                            norm=self.hyperspectralmap.norm,\
                                            interpolation = 'nearest',\
                                            extent=[np.min(self.X),np.max(self.X),np.max(self.Y),np.min(self.Y)])
-        if self.Linescan:
-            self.linescan = np.sum(self.hypSpectrum,axis=0)
-            if self.normalize:
-                self.linescan /= self.linescan.max()
-            if lognorm:
-                norm = matplotlib.colors.LogNorm()#vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
-            else:
-                norm = matplotlib.colors.Normalize()#vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
-            self.linescanmap = cm.ScalarMappable(cmap=jet,norm=norm)
-            self.linescanmap.set_clim(vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
-            # ATTENTION pcolormesh =/= imshow
-            #imshow takes values at pixel 
-            #pcolormesh takes values between
-            temp = np.linspace(self.X.min(),self.X.max(),self.X.size+1)
-            self.im=self.cx.pcolormesh(temp,eV_To_nm/self.wavelenght,self.linescan.T,\
-                                       cmap=self.linescanmap.cmap,norm=self.linescanmap.norm,\
-                                           rasterized=True,antialiased=True)
             
-            self.cx.format_coord = self.format_coord
-            self.cx.set_ylabel("Energy (eV)")
-            self.cx.set_xlabel("distance (µm)")
-            self.cx.set_aspect(self.aspect)
+        self.linescan = np.sum(self.hypSpectrum,axis=0)
+        if self.normalize:
+            self.linescan /= self.linescan.max()
+        if self.lognorm:
+            norm = matplotlib.colors.LogNorm()#vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
         else:
-            self.im = self.cx.imshow(self.wavelenght[np.nanargmax(self.hypSpectrum,axis=2)],\
-                                     cmap='viridis',\
-                                    extent=[np.min(self.X),np.max(self.X),np.max(self.Y),np.min(self.Y)])    
-            self.cx.set_aspect(aspect)
+            norm = matplotlib.colors.Normalize()#vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
+        self.linescanmap = cm.ScalarMappable(cmap=jet,norm=norm)
+        self.linescanmap.set_clim(vmin=np.nanmin(self.linescan),vmax=np.nanmax(self.linescan))
+        # ATTENTION pcolormesh =/= imshow
+        #imshow takes values at pixel 
+        #pcolormesh takes values between
+        temp = np.linspace(self.X.min(),self.X.max(),self.X.size+1)
+        self.im=self.cx.pcolormesh(temp,eV_To_nm/self.wavelenght,self.linescan.T,\
+                                   cmap=self.linescanmap.cmap,norm=self.linescanmap.norm,\
+                                       rasterized=True,antialiased=True)
+        
+        self.cx.format_coord = self.format_coord
+        self.cx.set_ylabel("Energy (eV)")
+        self.cx.set_xlabel("Distance (µm)")
+        self.cx.set_aspect(self.aspect)
+
         self.bx.set_aspect(self.aspect)
         self.ax.set_aspect(self.aspect)
         self.ax.get_shared_y_axes().join(self.ax, self.bx)
-        self.ax.set_ylabel("distance (µm)")
+        self.ax.set_ylabel("Distance (µm)")
     
         #Colorbar du linescan
         pos = self.cx.get_position().bounds
         cbar_ax = self.fig.add_axes([0.85, pos[1], 0.05, pos[-1]*0.9])  
         self.fig.colorbar(self.linescanmap, cax=cbar_ax)
-        if not lognorm:
+        if not self.lognorm:
             cbar_ax.ticklabel_format(axis='both',style='sci',scilimits=(0,0))
     
         #Colorbar de l'image
@@ -165,7 +181,7 @@ class cartography():
         #%%
         # if save==True:
         #     self.fig.savefig(os.path.join(dirname,filename+".png"),dpi=300)
-        if autoclose==True:
+        if self.autoclose==True:
             plt.close(self.fig)
             return None
         self.Spectrum = Spectrum(self.wavelenght,np.nanmax(self.hypSpectrum))
@@ -177,9 +193,8 @@ class cartography():
         #     print("updated xlims: ", axes)
         
         self.span = None
-        if Linescan:
-            self.span = SpanSelector(self.cx, self.onselect, 'vertical', useblit=True,
-                                rectprops=dict(alpha=0.5, facecolor='red'),button=1)
+        self.span = SpanSelector(self.cx, self.onselect, 'vertical', useblit=True,
+                            rectprops=dict(alpha=0.5, facecolor='red'),button=1)
         self.fig.canvas.mpl_connect('button_press_event', self.onclick)
         self.fig.canvas.mpl_connect('motion_notify_event',self.onmotion)
         self.fig.canvas.mpl_connect('button_release_event',self.onrelease)
@@ -256,6 +271,8 @@ class cartography():
             self.wavelenght = ma.masked_array(self.wavelenght.data,mask=False)
         else:
             self.wavelenght = ma.masked_outside(self.wavelenght.data,eV_To_nm/ymax,eV_To_nm/ymin)
+        self.Emin = eV_To_nm/self.wavelenght.max()
+        self.Emax = eV_To_nm/self.wavelenght.min()
         self.Spectrum.set_limitbar(self.wavelenght.min(),self.wavelenght.max())
         hypmask = np.resize(self.wavelenght.mask,self.hypSpectrum.shape)
         self.hypSpectrum = ma.masked_array(self.hypSpectrum.data,mask=hypmask)
@@ -287,13 +304,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args.paths)
     matplotlib.rcParams["savefig.directory"] = ""
-    log = bool(input("Logscale [y/n]?").lower()=='y')
-    trueSEM = bool(input("True SEM [y/n]?").lower()=='y')
-    normalize = bool(input("Normalize [y/n]?").lower()=='y')
     
-    kwargs = {}
+    autoplot = not bool(input("Edit Default Param. [y/n]?").lower()=='y')
+    # log = bool(input("Logscale [y/n]?").lower()=='y')
+    # trueSEM = bool(input("True SEM [y/n]?").lower()=='y')
+    # normalize = bool(input("Normalize [y/n]?").lower()=='y')
     
-    carto = cartography(path=args.paths,deadPixeltol=args.deadPixeltol,Linescan=args.linescan,lognorm=log,trueSEM=trueSEM,normalize=normalize)
+    
+    carto = cartography(path=args.paths,deadPixeltol=args.deadPixeltol,Linescan=args.linescan,autoplot=autoplot)#lognorm=log,trueSEM=trueSEM,normalize=normalize)
 
     
     # path = [r"C:\Users\sylvain.finot\Cloud Neel\Data\2019\2019-04-29 - T2628 - 300K\Fil 1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t025ms-cw550nm\Hyp.dat",

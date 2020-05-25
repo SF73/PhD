@@ -20,7 +20,7 @@ def getListOfFiles(dirName,recursive=True):
     return allFiles
 
 def getSpectro_info(path):
-    #path=r"C:\Users\sylvain.finot\Cloud Neel\Data\2019-05-28 - T2628 - 300K\Fil1\HYP-T2628-300K-Vacc5kV-spot5-zoom8000x-gr600-slit0-2-t005ms-cw450nm\Hyp_spectro_info.asc"
+    #path=r"C:\Users\sylvain.finot\Cloud Neel\Data\2020\2020-02-20 - T2575\005K\Wire 1\Hyp_T005K_cw295nm_spot3-5_HV5kV_gr600_slit1mm_t010ms_zoom12000_spectro_info.asc"
     return pd.read_csv(path,delimiter='\t').to_numpy()
 
 def casino(path):

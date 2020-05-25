@@ -1,0 +1,9 @@
+*.png
+*.dat
+*.pyc
+*.nbi
+*.nbc
+*.log
+*/*/*/__pycache__/
+*/*/__pycache__/
+*/__pycache__/
